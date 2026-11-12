@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check whitespace and conflict markers
+        run: |
+          git diff --check
+          if grep -R -n -E '^(<<<<<<<|=======|>>>>>>>)' --include='*.m' --include='*.f' --include='*.for' --include='*.f90' .; then
+            echo "Merge conflict markers found"
+            exit 1
+          fi
+      - name: Compile Fortran sources when present
+        run: |
+          files=$(find . -type f \( -iname '*.f' -o -iname '*.for' -o -iname '*.f90' \))
+          if [ -n "$files" ]; then
+            sudo apt-get update
+            sudo apt-get install -y gfortran
+            while IFS= read -r file; do
+              echo "Syntax-checking $file"
+              gfortran -fsyntax-only "$file"
+            done <<< "$files"
+          else
+            echo "No Fortran sources found; MATLAB files require MATLAB/Octave runtime validation."
+          fi
